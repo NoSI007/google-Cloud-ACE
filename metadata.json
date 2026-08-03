@@ -1,0 +1,6 @@
+{
+  "name": "ACE Cloud Guide",
+  "description": "Google Cloud Associate Cloud Engineer (ACE) learning guide & interactive infrastructure tutorial for novices.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
