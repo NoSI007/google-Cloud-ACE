@@ -69,3 +69,25 @@ data class FlashcardQuizQuestion(
     val explanation: String
 )
 
+data class GcloudCliCommand(
+    val id: String,
+    val command: String,
+    val description: String,
+    val category: String,
+    val syntaxBreakdown: String,
+    val commonFlags: List<Pair<String, String>>,
+    val aceExamTip: String,
+    val exampleOutput: String? = null
+)
+
+data class CloudBestPractice(
+    val id: String,
+    val title: String,
+    val category: String,
+    val rule: String,
+    val rationale: String,
+    val actionableGuideline: String,
+    val antiPattern: String,
+    val aceExamPriority: String
+)
+

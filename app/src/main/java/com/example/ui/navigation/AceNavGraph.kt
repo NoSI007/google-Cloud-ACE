@@ -28,6 +28,8 @@ sealed class AceBottomNavItem(
     val testTag: String
 ) {
     object Dashboard : AceBottomNavItem("dashboard", "Home", Icons.Default.Home, "tab_dashboard")
+    object QuickRef : AceBottomNavItem("quick_ref", "CLI/Ref", Icons.Default.Terminal, "tab_quick_ref")
+    object Flashcards : AceBottomNavItem("flashcards", "Cards", Icons.Default.Flip, "tab_flashcards")
     object Glossary : AceBottomNavItem("glossary", "Search", Icons.Default.Search, "tab_glossary")
     object Modules : AceBottomNavItem("modules", "Modules", Icons.Default.MenuBook, "tab_modules")
     object ComputeLab : AceBottomNavItem("compute_lab", "Compute", Icons.Default.Dns, "tab_compute")
@@ -44,6 +46,8 @@ fun AceMainAppScreen(viewModel: AceViewModel) {
 
     val bottomItems = listOf(
         AceBottomNavItem.Dashboard,
+        AceBottomNavItem.QuickRef,
+        AceBottomNavItem.Flashcards,
         AceBottomNavItem.Glossary,
         AceBottomNavItem.Modules,
         AceBottomNavItem.ComputeLab,
@@ -117,7 +121,23 @@ fun AceMainAppScreen(viewModel: AceViewModel) {
                     onNavigateToComputeSim = { navController.navigate(AceBottomNavItem.ComputeLab.route) },
                     onNavigateToStorageSim = { navController.navigate(AceBottomNavItem.StorageLab.route) },
                     onNavigateToQuiz = { navController.navigate(AceBottomNavItem.Quiz.route) },
-                    onNavigateToGlossary = { navController.navigate(AceBottomNavItem.Glossary.route) }
+                    onNavigateToGlossary = { navController.navigate(AceBottomNavItem.Glossary.route) },
+                    onNavigateToFlashcards = { navController.navigate(AceBottomNavItem.Flashcards.route) },
+                    onNavigateToQuickRef = { navController.navigate(AceBottomNavItem.QuickRef.route) }
+                )
+            }
+
+            composable(AceBottomNavItem.QuickRef.route) {
+                QuickReferenceScreen(
+                    viewModel = viewModel,
+                    onNavigateBack = null
+                )
+            }
+
+            composable(AceBottomNavItem.Flashcards.route) {
+                FlashcardsScreen(
+                    viewModel = viewModel,
+                    onNavigateBack = null
                 )
             }
 

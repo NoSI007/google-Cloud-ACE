@@ -14,9 +14,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -33,6 +31,8 @@ import com.example.R
 import com.example.data.model.AceModule
 import com.example.ui.AceViewModel
 import com.example.ui.components.AiExplanationBottomSheet
+import com.example.ui.components.BillingAndPermissionsLabComponent
+import com.example.ui.components.ExportStudyGuideDialog
 import com.example.ui.theme.*
 
 
@@ -45,7 +45,9 @@ fun DashboardScreen(
     onNavigateToComputeSim: () -> Unit,
     onNavigateToStorageSim: () -> Unit,
     onNavigateToQuiz: () -> Unit,
-    onNavigateToGlossary: () -> Unit
+    onNavigateToGlossary: () -> Unit,
+    onNavigateToFlashcards: () -> Unit = {},
+    onNavigateToQuickRef: () -> Unit = {}
 ) {
     val completedIds by viewModel.completedLessonIds.collectAsState()
     val quizScores by viewModel.quizScores.collectAsState()
@@ -55,6 +57,7 @@ fun DashboardScreen(
     val progressFraction = if (totalLessons > 0) completedCount.toFloat() / totalLessons.toFloat() else 0f
 
     val lastQuizScore = quizScores.firstOrNull()
+    var showExportDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -81,8 +84,18 @@ fun DashboardScreen(
                         }
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
+                            IconButton(
+                                onClick = { showExportDialog = true },
+                                modifier = Modifier.testTag("top_bar_export_btn")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.FileDownload,
+                                    contentDescription = "Export Offline Study Guide",
+                                    tint = EditorialPrimary
+                                )
+                            }
                             IconButton(
                                 onClick = onNavigateToGlossary,
                                 modifier = Modifier.testTag("top_bar_search_btn")
@@ -295,6 +308,187 @@ fun DashboardScreen(
                 }
             }
 
+            // ACE Exam Flashcards Card
+            item {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onNavigateToFlashcards() }
+                        .testTag("dashboard_flashcards_card"),
+                    shape = RoundedCornerShape(28.dp),
+                    colors = CardDefaults.cardColors(containerColor = EditorialSurface),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, EditorialBorderAccent)
+                ) {
+                    Column(modifier = Modifier.padding(20.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Flip,
+                                    contentDescription = null,
+                                    tint = EditorialPrimary
+                                )
+                                Text(
+                                    text = "ROOM DB PRACTICE",
+                                    style = EditorialLabelCaps,
+                                    color = EditorialPrimary
+                                )
+                            }
+                            Surface(
+                                shape = CircleShape,
+                                color = EditorialBadgeBg
+                            ) {
+                                Text(
+                                    text = "3D Flip Animation",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = EditorialPrimaryDark,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Text(
+                            text = "ACE Exam Service Flashcards",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = EditorialTextPrimary
+                        )
+
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        Text(
+                            text = "Memorize GCP services (Compute, Storage, Networking, IAM, DevOps) with 3D flipping cards stored reactively in Room database.",
+                            fontSize = 13.sp,
+                            color = EditorialTextSecondary,
+                            lineHeight = 18.sp
+                        )
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Button(
+                                onClick = onNavigateToFlashcards,
+                                shape = CircleShape,
+                                colors = ButtonDefaults.buttonColors(containerColor = EditorialPrimary),
+                                modifier = Modifier.testTag("open_flashcards_btn")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Flip,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Practice Flashcards", fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Quick Reference Card (CLI & Best Practices)
+            item {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onNavigateToQuickRef() }
+                        .testTag("dashboard_quick_ref_card"),
+                    shape = RoundedCornerShape(28.dp),
+                    colors = CardDefaults.cardColors(containerColor = EditorialSurface),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, EditorialBorderAccent)
+                ) {
+                    Column(modifier = Modifier.padding(20.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Terminal,
+                                    contentDescription = null,
+                                    tint = EditorialPrimary
+                                )
+                                Text(
+                                    text = "EXAM CHEAT SHEET",
+                                    style = EditorialLabelCaps,
+                                    color = EditorialPrimary
+                                )
+                            }
+                            Surface(
+                                shape = CircleShape,
+                                color = EditorialBadgeBg
+                            ) {
+                                Text(
+                                    text = "Searchable CLI & Rules",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = EditorialPrimaryDark,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Text(
+                            text = "Quick Reference & CLI Commands",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = EditorialTextPrimary
+                        )
+
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        Text(
+                            text = "Instant search across essential gcloud, gsutil, and kubectl commands, flags, syntax, and architecture best practice guidelines with actionable Dos and Don'ts.",
+                            fontSize = 13.sp,
+                            color = EditorialTextSecondary,
+                            lineHeight = 18.sp
+                        )
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Button(
+                                onClick = onNavigateToQuickRef,
+                                shape = CircleShape,
+                                colors = ButtonDefaults.buttonColors(containerColor = EditorialPrimary),
+                                modifier = Modifier.testTag("open_quick_ref_btn")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Search,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Open Quick Reference", fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                            }
+                        }
+                    }
+                }
+            }
+
+
             // Interactive Infrastructure Labs Title
             item {
                 Text(
@@ -438,6 +632,15 @@ fun DashboardScreen(
                 }
             }
 
+            // Billing & IAM Permissions Interactive Lab
+            item {
+                BillingAndPermissionsLabComponent(
+                    onAskAi = { title, context ->
+                        viewModel.requestAiExpandedExplanation(title, context)
+                    }
+                )
+            }
+
             // Core ACE Exam Modules Header
             item {
                 Row(
@@ -539,6 +742,13 @@ fun DashboardScreen(
 }
 
     AiExplanationBottomSheet(viewModel = viewModel)
+
+    if (showExportDialog) {
+        ExportStudyGuideDialog(
+            viewModel = viewModel,
+            onDismiss = { showExportDialog = false }
+        )
+    }
 }
 
 

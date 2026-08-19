@@ -42,10 +42,32 @@ class AceViewModel(application: Application) : AndroidViewModel(application) {
     val completedLessonIds: StateFlow<Set<String>>
     val bookmarkedTips: StateFlow<List<com.example.data.local.BookmarkedTipEntity>>
     val quizScores: StateFlow<List<com.example.data.local.QuizScoreEntity>>
+    val roomFlashcards: StateFlow<List<com.example.data.local.AceFlashcardEntity>>
 
     val modules: List<AceModule>
     val quizQuestions: List<QuizQuestion>
     val allGcpTerms: List<GcpTerm>
+    val allCliCommands: List<GcloudCliCommand>
+    val allBestPractices: List<CloudBestPractice>
+
+    // Quick Reference State
+    private val _quickRefSearchQuery = MutableStateFlow("")
+    val quickRefSearchQuery: StateFlow<String> = _quickRefSearchQuery.asStateFlow()
+
+    private val _quickRefCommandCategory = MutableStateFlow("All")
+    val quickRefCommandCategory: StateFlow<String> = _quickRefCommandCategory.asStateFlow()
+
+    private val _quickRefPracticeCategory = MutableStateFlow("All")
+    val quickRefPracticeCategory: StateFlow<String> = _quickRefPracticeCategory.asStateFlow()
+
+    private val _quickRefActiveTab = MutableStateFlow(0) // 0: CLI Commands, 1: Best Practices
+    val quickRefActiveTab: StateFlow<Int> = _quickRefActiveTab.asStateFlow()
+
+    private val _quickRefHighYieldOnly = MutableStateFlow(false)
+    val quickRefHighYieldOnly: StateFlow<Boolean> = _quickRefHighYieldOnly.asStateFlow()
+
+    val filteredCliCommands: StateFlow<List<GcloudCliCommand>>
+    val filteredBestPractices: StateFlow<List<CloudBestPractice>>
 
     // Search & Glossary State
     private val _searchTermQuery = MutableStateFlow("")
@@ -83,6 +105,18 @@ class AceViewModel(application: Application) : AndroidViewModel(application) {
     val storageSimulationResult: StateFlow<StorageSimulationResult>
 
     // Quiz State
+    private val _selectedQuizCategory = MutableStateFlow("All Modules")
+    val selectedQuizCategory: StateFlow<String> = _selectedQuizCategory.asStateFlow()
+
+    private val _isImmediateFeedbackMode = MutableStateFlow(true)
+    val isImmediateFeedbackMode: StateFlow<Boolean> = _isImmediateFeedbackMode.asStateFlow()
+
+    private val _bookmarkedQuestionIds = MutableStateFlow<Set<Int>>(emptySet())
+    val bookmarkedQuestionIds: StateFlow<Set<Int>> = _bookmarkedQuestionIds.asStateFlow()
+
+    private val _onlyReviewIncorrect = MutableStateFlow(false)
+    val onlyReviewIncorrect: StateFlow<Boolean> = _onlyReviewIncorrect.asStateFlow()
+
     private val _currentQuizIndex = MutableStateFlow(0)
     val currentQuizIndex: StateFlow<Int> = _currentQuizIndex.asStateFlow()
 
@@ -109,14 +143,68 @@ class AceViewModel(application: Application) : AndroidViewModel(application) {
     val flashcardQuizScore: StateFlow<Int> = _flashcardQuizScore.asStateFlow()
 
     init {
-        val dao = AppDatabase.getDatabase(application).userProgressDao()
-        repository = AceRepository(dao)
+        val db = AppDatabase.getDatabase(application)
+        repository = AceRepository(
+            progressDao = db.userProgressDao(),
+            flashcardDao = db.aceFlashcardDao()
+        )
+
+        viewModelScope.launch {
+            repository.ensureFlashcardsSeeded()
+        }
+
+        roomFlashcards = repository.allRoomFlashcards
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
         modules = repository.getModules()
         quizQuestions = repository.getPracticeQuizQuestions()
         allGcpTerms = repository.getGcpTerms()
+        allCliCommands = repository.getCliCommands()
+        allBestPractices = repository.getCloudBestPractices()
         _flashcards.value = allGcpTerms
         generateFlashcardQuiz()
+
+        filteredCliCommands = combine(
+            _quickRefSearchQuery,
+            _quickRefCommandCategory,
+            _quickRefHighYieldOnly
+        ) { query, category, highYieldOnly ->
+            allCliCommands.filter { cmd ->
+                val matchesCategory = (category == "All" || cmd.category.equals(category, ignoreCase = true))
+                val q = query.trim().lowercase()
+                val matchesQuery = q.isEmpty() ||
+                        cmd.command.lowercase().contains(q) ||
+                        cmd.description.lowercase().contains(q) ||
+                        cmd.category.lowercase().contains(q) ||
+                        cmd.syntaxBreakdown.lowercase().contains(q) ||
+                        cmd.aceExamTip.lowercase().contains(q) ||
+                        cmd.commonFlags.any { it.first.lowercase().contains(q) || it.second.lowercase().contains(q) }
+
+                val matchesHighYield = !highYieldOnly || cmd.aceExamTip.isNotEmpty()
+                matchesCategory && matchesQuery && matchesHighYield
+            }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), allCliCommands)
+
+        filteredBestPractices = combine(
+            _quickRefSearchQuery,
+            _quickRefPracticeCategory,
+            _quickRefHighYieldOnly
+        ) { query, category, highYieldOnly ->
+            allBestPractices.filter { bp ->
+                val matchesCategory = (category == "All" || bp.category.equals(category, ignoreCase = true))
+                val q = query.trim().lowercase()
+                val matchesQuery = q.isEmpty() ||
+                        bp.title.lowercase().contains(q) ||
+                        bp.rule.lowercase().contains(q) ||
+                        bp.rationale.lowercase().contains(q) ||
+                        bp.actionableGuideline.lowercase().contains(q) ||
+                        bp.antiPattern.lowercase().contains(q) ||
+                        bp.category.lowercase().contains(q)
+
+                val matchesHighYield = !highYieldOnly || bp.aceExamPriority.contains("Critical", ignoreCase = true)
+                matchesCategory && matchesQuery && matchesHighYield
+            }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), allBestPractices)
 
         filteredGcpTerms = combine(_searchTermQuery, _selectedTermCategory) { query, category ->
             allGcpTerms.filter { term ->
@@ -199,6 +287,45 @@ class AceViewModel(application: Application) : AndroidViewModel(application) {
     fun updateStorageHasLifecycle(hasLife: Boolean) { _storageState.value = _storageState.value.copy(hasLifecycle = hasLife) }
 
     // Quiz Actions
+    fun updateSelectedQuizCategory(category: String) {
+        _selectedQuizCategory.value = category
+        _currentQuizIndex.value = 0
+        _selectedQuizAnswers.value = emptyMap()
+        _quizSubmitted.value = false
+        _onlyReviewIncorrect.value = false
+    }
+
+    fun toggleImmediateFeedbackMode() {
+        _isImmediateFeedbackMode.value = !_isImmediateFeedbackMode.value
+    }
+
+    fun toggleBookmarkQuizQuestion(questionId: Int) {
+        val current = _bookmarkedQuestionIds.value.toMutableSet()
+        if (current.contains(questionId)) {
+            current.remove(questionId)
+        } else {
+            current.add(questionId)
+        }
+        _bookmarkedQuestionIds.value = current
+    }
+
+    fun getFilteredQuizQuestions(): List<QuizQuestion> {
+        val category = _selectedQuizCategory.value
+        val baseList = if (category == "All Modules") {
+            quizQuestions
+        } else {
+            quizQuestions.filter { it.topicCategory.contains(category, ignoreCase = true) || category.contains(it.topicCategory, ignoreCase = true) }
+        }
+        return if (_onlyReviewIncorrect.value) {
+            baseList.filterIndexed { idx, q ->
+                val ans = _selectedQuizAnswers.value[idx]
+                ans != null && ans != q.correctOptionIndex
+            }.ifEmpty { baseList }
+        } else {
+            baseList
+        }
+    }
+
     fun answerQuizQuestion(questionIndex: Int, optionIndex: Int) {
         if (!_quizSubmitted.value) {
             _selectedQuizAnswers.value = _selectedQuizAnswers.value.toMutableMap().apply {
@@ -210,20 +337,29 @@ class AceViewModel(application: Application) : AndroidViewModel(application) {
     fun submitQuiz() {
         if (!_quizSubmitted.value) {
             _quizSubmitted.value = true
+            val activeList = getFilteredQuizQuestions()
             var correctCount = 0
-            quizQuestions.forEachIndexed { idx, q ->
+            activeList.forEachIndexed { idx, q ->
                 if (_selectedQuizAnswers.value[idx] == q.correctOptionIndex) {
                     correctCount++
                 }
             }
             viewModelScope.launch {
-                repository.recordQuizResult(correctCount, quizQuestions.size)
+                repository.recordQuizResult(correctCount, activeList.size)
             }
         }
     }
 
+    fun jumpToQuizQuestion(index: Int) {
+        val activeList = getFilteredQuizQuestions()
+        if (index in activeList.indices) {
+            _currentQuizIndex.value = index
+        }
+    }
+
     fun nextQuizQuestion() {
-        if (_currentQuizIndex.value < quizQuestions.size - 1) {
+        val activeList = getFilteredQuizQuestions()
+        if (_currentQuizIndex.value < activeList.size - 1) {
             _currentQuizIndex.value = _currentQuizIndex.value + 1
         }
     }
@@ -235,6 +371,14 @@ class AceViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun resetQuiz() {
+        _quizSubmitted.value = false
+        _selectedQuizAnswers.value = emptyMap()
+        _currentQuizIndex.value = 0
+        _onlyReviewIncorrect.value = false
+    }
+
+    fun retakeIncorrectOnly() {
+        _onlyReviewIncorrect.value = true
         _quizSubmitted.value = false
         _selectedQuizAnswers.value = emptyMap()
         _currentQuizIndex.value = 0
@@ -376,8 +520,56 @@ class AceViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun toggleRoomFlashcardMastery(cardId: String, isCurrentlyMastered: Boolean) {
+        viewModelScope.launch {
+            repository.updateFlashcardMastery(cardId, !isCurrentlyMastered)
+        }
+    }
+
+    fun resetRoomFlashcardProgress() {
+        viewModelScope.launch {
+            repository.resetAllFlashcardProgress()
+        }
+    }
+
+    fun addCustomFlashcard(serviceName: String, category: String, prompt: String, definition: String, examTip: String, keyFeatures: String) {
+        val newCard = com.example.data.local.AceFlashcardEntity(
+            id = "custom_${System.currentTimeMillis()}",
+            serviceName = serviceName,
+            serviceCategory = category,
+            frontPrompt = prompt,
+            backDefinition = definition,
+            examTip = examTip,
+            keyFeaturesCsv = keyFeatures
+        )
+        viewModelScope.launch {
+            repository.insertCustomFlashcard(newCard)
+        }
+    }
+
+    fun updateQuickRefSearch(query: String) {
+        _quickRefSearchQuery.value = query
+    }
+
+    fun updateQuickRefCommandCategory(category: String) {
+        _quickRefCommandCategory.value = category
+    }
+
+    fun updateQuickRefPracticeCategory(category: String) {
+        _quickRefPracticeCategory.value = category
+    }
+
+    fun setQuickRefTab(tab: Int) {
+        _quickRefActiveTab.value = tab
+    }
+
+    fun toggleQuickRefHighYieldOnly() {
+        _quickRefHighYieldOnly.value = !_quickRefHighYieldOnly.value
+    }
+
     fun dismissAiExplanation() {
         _aiExplanationState.value = _aiExplanationState.value.copy(isOpen = false)
     }
 }
+
 
